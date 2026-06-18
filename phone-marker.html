@@ -520,7 +520,6 @@
     .small-label,
     #opacityValue,
     #scaleValue,
-    #rotationValue,
     #zoomLabel {
       color: rgba(0, 86, 188, .82) !important;
     }
@@ -623,7 +622,6 @@
     .small-label,
     #opacityValue,
     #scaleValue,
-    #rotationValue,
     #zoomLabel {
       color: rgba(49, 93, 150, .78) !important;
     }
@@ -972,13 +970,7 @@
           <span class="material-symbols-outlined">add_comment</span>添加时间补丁
         </button>
 
-        <div class="flex flex-col gap-2">
-          <div class="flex items-center justify-between">
-            <label class="small-label">水印图层</label>
-            <button id="sampleLayerBtn" class="text-[11px] font-extrabold text-[#0058bc] bg-white/40 rounded-full px-3 py-1.5">示例</button>
-          </div>
-          <div id="watermarkList" class="watermark-list"></div>
-        </div>
+        <div id="watermarkList" class="watermark-list"></div>
         <div id="textSettings" class="flex flex-col gap-4">
           <div class="flex items-center justify-between">
             <label class="small-label">文字水印设计</label>
@@ -1097,18 +1089,6 @@
             <input id="scale" type="range" min="20" max="300" value="100" />
             <p class="text-[10px] text-slate-400 font-semibold">100% = 原始尺寸</p>
             </div>
-          <div class="flex flex-col gap-1">
-            <div class="flex justify-between items-center gap-2">
-              <label class="text-[10px] font-extrabold text-slate-600 uppercase">旋转角度</label>
-              <div class="flex items-center gap-1">
-                <span id="rotationValue" class="text-[10px] font-mono font-extrabold text-[#0058bc]">0°</span>
-                <button id="resetRotationBtn" type="button" class="w-6 h-6 rounded-full hover:bg-white/70 grid place-items-center text-[#0058bc]" title="复位旋转">
-                  <span class="material-symbols-outlined text-sm">restart_alt</span>
-                </button>
-              </div>
-            </div>
-            <input id="rotation" type="range" min="-180" max="180" value="0" />
-          </div>
         </div>
 
         <div class="flex flex-col gap-3 bg-white/58 backdrop-blur-xl border border-white/70 rounded-2xl shadow-xl px-3 py-3">
@@ -1119,9 +1099,10 @@
             </div>
           </div>
           <input id="zoomRange" type="range" min="10" max="400" value="50" />
-          <div class="grid grid-cols-3 gap-2">
+          <div class="grid grid-cols-4 gap-2">
             <button type="button" class="zoom-preset h-7 rounded-lg hover:bg-white/70 text-[11px] font-extrabold" data-zoom="25">25%</button>
             <button type="button" class="zoom-preset h-7 rounded-lg hover:bg-white/70 text-[11px] font-extrabold" data-zoom="50">50%</button>
+            <button type="button" class="zoom-preset h-7 rounded-lg hover:bg-white/70 text-[11px] font-extrabold" data-zoom="75">75%</button>
             <button type="button" class="zoom-preset h-7 rounded-lg hover:bg-white/70 text-[11px] font-extrabold" data-zoom="100">100%</button>
           </div>
           <div class="flex items-center justify-between gap-2">
@@ -1244,7 +1225,6 @@
       imageList: $('imageList'),
       listTitle: $('listTitle'),
       sampleBtn: $('sampleBtn'),
-      sampleLayerBtn: $('sampleLayerBtn'),
       watermarkList: $('watermarkList'),
       canvasStack: $('canvasStack'),
       previewStage: $('previewStage'),
@@ -1262,9 +1242,6 @@
       scale: $('scale'),
       scaleValue: $('scaleValue'),
       resetScaleBtn: $('resetScaleBtn'),
-      rotation: $('rotation'),
-      rotationValue: $('rotationValue'),
-      resetRotationBtn: $('resetRotationBtn'),
       textColor: $('textColor'),
       textColorEyedropper: $('textColorEyedropper'),
       backgroundColor: $('backgroundColor'),
@@ -1745,6 +1722,7 @@
       state.custom = true;
       state.watermarks = (settings.watermarks || []).map(wm => ({
         ...wm,
+        rotation: 0,
         scale: wm.type === 'text' && (wm.scale == null || wm.scale < .5) ? 1 : wm.scale,
         textStyle: wm.textStyle ? cloneTextStyle(wm.textStyle) : undefined
       }));
@@ -1772,7 +1750,6 @@
     function updateLabels() {
       els.opacityValue.textContent = `${els.opacity.value}%`;
       els.scaleValue.textContent = `${els.scale.value}%`;
-      els.rotationValue.textContent = `${els.rotation.value}°`;
       els.textGapValue.textContent = `${els.textGap.value}px`;
       els.colonOffsetYValue.textContent = `${els.colonOffsetY.value}px`;
       els.backgroundPaddingValue.textContent = `${els.backgroundPadding.value}px`;
@@ -1828,15 +1805,12 @@
       const has = Boolean(wm);
       els.opacity.disabled = !has;
       els.scale.disabled = !has;
-      els.rotation.disabled = !has;
       if (wm) {
         els.opacity.value = Math.round(wm.opacity * 100);
         els.scale.value = Math.round(wm.scale * 100);
-        els.rotation.value = wm.rotation;
       } else {
         els.opacity.value = 50;
         els.scale.value = 100;
-        els.rotation.value = 0;
       }
       if (wm?.type === 'text') syncTextControls(wm.textStyle);
       updateLabels();
@@ -1848,7 +1822,7 @@
       if (!wm) return;
       wm.opacity = Number(els.opacity.value || 100) / 100;
       wm.scale = Number(els.scale.value || 100) / 100;
-      wm.rotation = Number(els.rotation.value || 0);
+      wm.rotation = 0;
       if (wm.type === 'text') {
         syncTimeInputs();
         wm.textStyle = cloneTextStyle({
@@ -2260,7 +2234,6 @@
     function renderWatermarkList() {
       els.watermarkList.innerHTML = '';
       if (!state.watermarks.length) {
-        els.watermarkList.innerHTML = '<p class="text-[11px] text-slate-500 bg-white/30 rounded-xl px-3 py-2">还没有水印图层，点击下方按钮添加文字水印。</p>';
         return;
       }
       state.watermarks.forEach((wm, index) => {
@@ -2579,7 +2552,7 @@
         updateFileMeta();
         setStatus('已清空');
       };
-      [els.opacity, els.scale, els.rotation].forEach(el => el.addEventListener('input', () => {
+      [els.opacity, els.scale].forEach(el => el.addEventListener('input', () => {
         if (!state.dragging) {
           clearGuides();
         }
@@ -2597,13 +2570,6 @@
       };
       els.resetScaleBtn.onclick = () => {
         els.scale.value = 100;
-        updateActiveWatermarkFromControls();
-        updateLabels();
-        renderWatermarkList();
-        renderPreview();
-      };
-      els.resetRotationBtn.onclick = () => {
-        els.rotation.value = 0;
         updateActiveWatermarkFromControls();
         updateLabels();
         renderWatermarkList();
@@ -2644,7 +2610,6 @@
       els.exportCurrentBtn.onclick = exportCurrent;
       els.closeModalBtn.onclick = () => els.exportModal.classList.remove('open');
       els.sampleBtn.onclick = addSample;
-      els.sampleLayerBtn.onclick = addSample;
       els.textColorEyedropper.onclick = () => pickColor(els.textColor, '文字颜色');
       els.backgroundColorEyedropper.onclick = () => pickColor(els.backgroundColor, '背景颜色');
       els.zoomRange.addEventListener('input', () => {
