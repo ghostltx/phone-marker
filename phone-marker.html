@@ -202,6 +202,10 @@
       font-size: 13px;
     }
     .field:focus { box-shadow: 0 0 0 3px rgba(0,114,245,.14); border-color: rgba(0,114,245,.55); }
+    .position-card {
+      border-radius: 18px !important;
+      overflow: hidden;
+    }
     input[type="range"] {
       -webkit-appearance: none;
       width: 100%;
@@ -244,6 +248,10 @@
       align-items: flex-start;
       padding: 24px 24px 40px;
       box-sizing: border-box;
+    }
+    .preview-center.empty-preview {
+      align-items: center;
+      padding-bottom: 24px;
     }
     .preview-inner {
       position: relative;
@@ -391,14 +399,20 @@
       background: linear-gradient(145deg, #fff58a, #ffd43f) !important;
     }
     #hourInput,
-    #minuteInput {
+    #minuteInput,
+    #positionX,
+    #positionY,
+    #positionPresetName {
       border: 1px solid rgba(112, 145, 180, .30) !important;
       border-radius: 12px !important;
       background: rgba(255,255,255,.58) !important;
       box-shadow: inset 1px 1px 0 rgba(255,255,255,.92), inset -1px -1px 0 rgba(74, 121, 164, .08), 0 5px 14px rgba(56, 105, 148, .07);
     }
     #hourInput:focus,
-    #minuteInput:focus {
+    #minuteInput:focus,
+    #positionX:focus,
+    #positionY:focus,
+    #positionPresetName:focus {
       border-color: rgba(0,114,245,.48) !important;
       box-shadow: 0 0 0 3px rgba(0,114,245,.12), inset 1px 1px 0 rgba(255,255,255,.92);
     }
@@ -1047,6 +1061,36 @@
                 </button>
               </div>
             </div>
+            <div class="tile position-card p-3 flex flex-col gap-2">
+              <div class="flex items-center justify-between">
+                <span class="text-[10px] font-extrabold text-slate-600 uppercase">位置坐标</span>
+                <label class="flex items-center gap-1.5 text-[9px] font-bold text-slate-500 cursor-pointer">
+                  <input id="positionLock" type="checkbox" class="w-3.5 h-3.5 rounded border-white/70 text-[#0058bc]" />
+                  锁定位置
+                </label>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <label class="flex items-center gap-2">
+                  <span class="text-[10px] font-extrabold text-[#0058bc]">X</span>
+                  <input id="positionX" type="number" min="0" max="100" step="0.1" class="field min-w-0 px-1 text-center text-base font-bold tabular-nums" value="8" />
+                </label>
+                <label class="flex items-center gap-2">
+                  <span class="text-[10px] font-extrabold text-[#0058bc]">Y</span>
+                  <input id="positionY" type="number" min="0" max="100" step="0.1" class="field min-w-0 px-1 text-center text-base font-bold tabular-nums" value="8" />
+                </label>
+              </div>
+              <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                <select id="positionPreset" class="field h-9 py-1.5 min-w-0" aria-label="位置预设"></select>
+                <button id="applyPositionPresetBtn" type="button" class="h-9 px-3 rounded-xl bg-white/55 hover:bg-white/75 text-[10px] font-extrabold text-[#0058bc]">应用</button>
+              </div>
+              <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
+                <input id="positionPresetName" type="text" maxlength="24" class="field min-w-0 px-3 text-base font-bold" placeholder="预设名称" />
+                <button id="savePositionPresetBtn" type="button" class="h-9 px-3 rounded-xl bg-[#0058bc]/10 text-[10px] font-extrabold text-[#0058bc]">保存</button>
+                <button id="deletePositionPresetBtn" type="button" class="h-9 w-9 rounded-xl bg-white/45 hover:bg-red-50 grid place-items-center text-slate-500" title="删除所选预设">
+                  <span class="material-symbols-outlined text-base">delete</span>
+                </button>
+              </div>
+            </div>
             <div class="flex flex-col gap-1.5">
               <div class="flex justify-between items-center">
                 <label class="text-[10px] font-extrabold text-slate-600 uppercase">数字间距</label>
@@ -1173,6 +1217,8 @@
 
   <script>
     const $ = (id) => document.getElementById(id);
+    const POSITION_PRESETS_STORAGE_KEY = 'phone-marker-position-presets-v1';
+    const LAST_POSITION_STORAGE_KEY = 'phone-marker-last-position-v1';
     const FONT_EXTENSIONS = /\.(?:ttf|otf|woff2?|ttc)$/i;
     const FALLBACK_FONT_FILES = [
       'GoogleSans-Bold.ttf',
@@ -1226,6 +1272,8 @@
       pendingDrag: null,
       watermarks: [],
       activeWatermarkId: null,
+      positionPresets: [],
+      lastPosition: { x: .08, y: .08 },
       history: [],
       textDraftStyle: { ...DEFAULT_TEXT_WATERMARK_STYLE }
     };
@@ -1241,6 +1289,7 @@
       watermarkList: $('watermarkList'),
       canvasStack: $('canvasStack'),
       previewStage: $('previewStage'),
+      previewViewport: $('previewViewport'),
       previewInner: $('previewInner'),
       previewCanvas: $('previewCanvas'),
       guideCanvas: $('guideCanvas'),
@@ -1259,6 +1308,14 @@
       textColorEyedropper: $('textColorEyedropper'),
       backgroundColor: $('backgroundColor'),
       backgroundColorEyedropper: $('backgroundColorEyedropper'),
+      positionX: $('positionX'),
+      positionY: $('positionY'),
+      positionLock: $('positionLock'),
+      positionPreset: $('positionPreset'),
+      positionPresetName: $('positionPresetName'),
+      applyPositionPresetBtn: $('applyPositionPresetBtn'),
+      savePositionPresetBtn: $('savePositionPresetBtn'),
+      deletePositionPresetBtn: $('deletePositionPresetBtn'),
       fontFamily: $('fontFamily'),
       fontSize: $('fontSize'),
       textGap: $('textGap'),
@@ -1824,6 +1881,9 @@
         els.scale.value = 100;
       }
       if (wm?.type === 'text') syncTextControls(wm.textStyle);
+      els.positionLock.checked = Boolean(wm?.positionLocked);
+      els.positionLock.disabled = !wm;
+      syncPositionControls(wm || state.lastPosition);
       updateLabels();
       renderWatermarkList();
     }
@@ -2012,12 +2072,14 @@
     function renderPreview(center = true) {
       const item = selectedItem();
       if (!item) {
+        els.previewViewport.classList.add('empty-preview');
         els.canvasStack.classList.add('hidden');
         els.emptyState.classList.remove('hidden');
         clearGuides();
         updateFileMeta();
         return;
       }
+      els.previewViewport.classList.remove('empty-preview');
       els.emptyState.classList.add('hidden');
       els.canvasStack.classList.remove('hidden');
       renderCanvasTo(els.previewCanvas, item, item.settings, null);
@@ -2320,6 +2382,152 @@
       return copy;
     }
 
+    function clampPosition(value) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) return 0;
+      return Math.max(0, Math.min(1, number));
+    }
+
+    function positionPercent(value) {
+      return Math.round(clampPosition(value) * 1000) / 10;
+    }
+
+    function readStoredJson(key, fallback) {
+      try {
+        const value = JSON.parse(localStorage.getItem(key));
+        return value ?? fallback;
+      } catch {
+        return fallback;
+      }
+    }
+
+    function loadPositionStorage() {
+      const storedPosition = readStoredJson(LAST_POSITION_STORAGE_KEY, null);
+      if (storedPosition && Number.isFinite(Number(storedPosition.x)) && Number.isFinite(Number(storedPosition.y))) {
+        state.lastPosition = {
+          x: clampPosition(storedPosition.x),
+          y: clampPosition(storedPosition.y)
+        };
+      }
+      const storedPresets = readStoredJson(POSITION_PRESETS_STORAGE_KEY, []);
+      state.positionPresets = Array.isArray(storedPresets)
+        ? storedPresets.filter(preset => preset?.id && preset?.name).map(preset => ({
+            id: String(preset.id),
+            name: String(preset.name).slice(0, 24),
+            x: clampPosition(preset.x),
+            y: clampPosition(preset.y)
+          }))
+        : [];
+    }
+
+    function persistLastPosition(position = state.lastPosition) {
+      state.lastPosition = {
+        x: clampPosition(position.x),
+        y: clampPosition(position.y)
+      };
+      localStorage.setItem(LAST_POSITION_STORAGE_KEY, JSON.stringify(state.lastPosition));
+    }
+
+    function persistPositionPresets() {
+      localStorage.setItem(POSITION_PRESETS_STORAGE_KEY, JSON.stringify(state.positionPresets));
+    }
+
+    function currentPosition() {
+      const wm = activeWatermark();
+      return wm ? { x: wm.x, y: wm.y } : state.lastPosition;
+    }
+
+    function syncPositionControls(position = currentPosition()) {
+      els.positionX.value = positionPercent(position.x);
+      els.positionY.value = positionPercent(position.y);
+    }
+
+    function renderPositionPresets(selectedId = els.positionPreset.value) {
+      els.positionPreset.replaceChildren();
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = state.positionPresets.length ? '选择位置预设' : '暂无位置预设';
+      els.positionPreset.appendChild(placeholder);
+      state.positionPresets.forEach(preset => {
+        const option = document.createElement('option');
+        option.value = preset.id;
+        option.textContent = `${preset.name} · ${positionPercent(preset.x)}%, ${positionPercent(preset.y)}%`;
+        els.positionPreset.appendChild(option);
+      });
+      els.positionPreset.value = state.positionPresets.some(preset => preset.id === selectedId) ? selectedId : '';
+      els.applyPositionPresetBtn.disabled = !els.positionPreset.value;
+      els.deletePositionPresetBtn.disabled = !els.positionPreset.value;
+    }
+
+    function setActivePosition(position, options = {}) {
+      const next = {
+        x: clampPosition(position.x),
+        y: clampPosition(position.y)
+      };
+      const wm = activeWatermark();
+      if (wm) {
+        wm.x = next.x;
+        wm.y = next.y;
+        applySettingsToSelected();
+        renderPreview(false);
+      }
+      persistLastPosition(next);
+      syncPositionControls(next);
+      if (options.status) setStatus(options.status);
+    }
+
+    function positionFromInputs() {
+      return {
+        x: clampPosition(Number(els.positionX.value) / 100),
+        y: clampPosition(Number(els.positionY.value) / 100)
+      };
+    }
+
+    function savePositionPreset() {
+      const name = els.positionPresetName.value.trim() || `位置 ${state.positionPresets.length + 1}`;
+      const position = currentPosition();
+      const selected = state.positionPresets.find(preset => preset.id === els.positionPreset.value);
+      const sameName = state.positionPresets.find(preset => preset.name === name && preset.id !== selected?.id);
+      if (sameName) {
+        sameName.x = clampPosition(position.x);
+        sameName.y = clampPosition(position.y);
+        if (selected) {
+          state.positionPresets = state.positionPresets.filter(preset => preset.id !== selected.id);
+        }
+      } else if (selected) {
+        selected.name = name.slice(0, 24);
+        selected.x = clampPosition(position.x);
+        selected.y = clampPosition(position.y);
+      } else {
+        state.positionPresets.push({
+          id: crypto.randomUUID(),
+          name: name.slice(0, 24),
+          x: clampPosition(position.x),
+          y: clampPosition(position.y)
+        });
+      }
+      persistPositionPresets();
+      const saved = sameName || selected || state.positionPresets.find(preset => preset.name === name);
+      renderPositionPresets(saved?.id);
+      els.positionPresetName.value = '';
+      setStatus(selected ? `已更新位置预设：${name}` : `已保存位置预设：${name}`);
+    }
+
+    function applySelectedPositionPreset() {
+      const preset = state.positionPresets.find(item => item.id === els.positionPreset.value);
+      if (!preset) return;
+      setActivePosition(preset, { status: `已应用位置预设：${preset.name}` });
+    }
+
+    function deleteSelectedPositionPreset() {
+      const preset = state.positionPresets.find(item => item.id === els.positionPreset.value);
+      if (!preset) return;
+      state.positionPresets = state.positionPresets.filter(item => item.id !== preset.id);
+      persistPositionPresets();
+      renderPositionPresets();
+      setStatus(`已删除位置预设：${preset.name}`);
+    }
+
     function setStatus(text) {
       els.statusText.textContent = text;
     }
@@ -2518,11 +2726,12 @@
         type: 'text',
         url: textPreviewDataUrl(compactStyle),
         textStyle: { ...compactStyle },
-        x: .08,
-        y: .08,
+        x: state.lastPosition.x,
+        y: state.lastPosition.y,
         opacity: 1,
         scale: .85,
-        rotation: 0
+        rotation: 0,
+        positionLocked: Boolean(els.positionLock.checked)
       };
       state.watermarks.push(wm);
       state.activeWatermarkId = wm.id;
@@ -2623,6 +2832,39 @@
       els.sampleBtn.onclick = addSample;
       els.textColorEyedropper.onclick = () => pickColor(els.textColor, '文字颜色');
       els.backgroundColorEyedropper.onclick = () => pickColor(els.backgroundColor, '背景颜色');
+      [els.positionX, els.positionY].forEach(input => {
+        input.addEventListener('change', () => {
+          setActivePosition(positionFromInputs(), { status: '位置坐标已更新' });
+        });
+        input.addEventListener('keydown', event => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            setActivePosition(positionFromInputs(), { status: '位置坐标已更新' });
+          }
+        });
+      });
+      els.positionLock.onchange = () => {
+        const wm = activeWatermark();
+        if (!wm) return;
+        wm.positionLocked = els.positionLock.checked;
+        applySettingsToSelected();
+        setStatus(wm.positionLocked ? '时间补丁位置已锁定' : '时间补丁位置已解锁');
+      };
+      els.positionPreset.onchange = () => {
+        const selected = state.positionPresets.find(item => item.id === els.positionPreset.value);
+        els.applyPositionPresetBtn.disabled = !selected;
+        els.deletePositionPresetBtn.disabled = !selected;
+        if (selected) els.positionPresetName.value = selected.name;
+      };
+      els.applyPositionPresetBtn.onclick = applySelectedPositionPreset;
+      els.savePositionPresetBtn.onclick = savePositionPreset;
+      els.deletePositionPresetBtn.onclick = deleteSelectedPositionPreset;
+      els.positionPresetName.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          savePositionPreset();
+        }
+      });
       els.zoomRange.addEventListener('input', () => {
         setZoom(els.zoomRange.value);
       });
@@ -2643,6 +2885,13 @@
         }
         if (e.altKey && (e.ctrlKey || e.metaKey)) {
           removeWatermarkLayer(hit.id);
+          clearGuides();
+          return;
+        }
+        if (hit.positionLocked) {
+          state.activeWatermarkId = hit.id;
+          loadActiveWatermarkControls();
+          setStatus('该时间补丁位置已锁定');
           clearGuides();
           return;
         }
@@ -2684,6 +2933,8 @@
         const wm = activeWatermark();
         const snapped = snapWatermarkToGuides(wm, centerPoint);
         Object.assign(wm, { x: snapped.x, y: snapped.y });
+        state.lastPosition = { x: wm.x, y: wm.y };
+        syncPositionControls(wm);
         updateActiveWatermarkFromControls();
         renderPreview();
         drawGuides(snapped.guides);
@@ -2693,6 +2944,8 @@
         state.shiftDragPreview = false;
         state.dragOffset = { x: 0, y: 0 };
         state.pendingDrag = null;
+        const wm = activeWatermark();
+        if (wm) persistLastPosition(wm);
         clearGuides();
         renderPreview();
       });
@@ -2719,7 +2972,12 @@
     }
 
     async function init() {
+      loadPositionStorage();
       await initializeFonts();
+      syncPositionControls(state.lastPosition);
+      els.positionLock.checked = false;
+      els.positionLock.disabled = true;
+      renderPositionPresets();
       els.zoomRange.value = '50';
       updateLabels();
       bindEvents();
