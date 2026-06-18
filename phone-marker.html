@@ -1127,15 +1127,6 @@
             <button type="button" class="zoom-preset h-7 rounded-lg hover:bg-white/70 text-[11px] font-extrabold" data-zoom="75">75%</button>
             <button type="button" class="zoom-preset h-7 rounded-lg hover:bg-white/70 text-[11px] font-extrabold" data-zoom="100">100%</button>
           </div>
-          <div class="flex items-center justify-between gap-2">
-            <button id="zoomOutBtn" class="w-8 h-7 rounded-lg hover:bg-white/70 grid place-items-center" title="缩小">
-              <span class="material-symbols-outlined text-lg">remove</span>
-            </button>
-            <span class="text-[10px] font-bold text-slate-400">支持滚轮缩放和中键拖动</span>
-            <button id="zoomInBtn" class="w-8 h-7 rounded-lg hover:bg-white/70 grid place-items-center" title="放大">
-              <span class="material-symbols-outlined text-lg">add</span>
-            </button>
-          </div>
         </div>
       </aside>
     </main>
@@ -1281,8 +1272,6 @@
       backgroundOpacity: $('backgroundOpacity'),
       backgroundOpacityValue: $('backgroundOpacityValue'),
       zoomRange: $('zoomRange'),
-      zoomOutBtn: $('zoomOutBtn'),
-      zoomInBtn: $('zoomInBtn'),
       zoomLabel: $('zoomLabel'),
       statusText: $('statusText'),
       fileMetaBar: $('fileMetaBar'),
@@ -2640,12 +2629,6 @@
       document.querySelectorAll('.zoom-preset').forEach(button => {
         button.onclick = () => setZoom(button.dataset.zoom);
       });
-      els.zoomOutBtn.onclick = () => {
-        setZoom(Math.round((state.zoom - .1) * 100));
-      };
-      els.zoomInBtn.onclick = () => {
-        setZoom(Math.round((state.zoom + .1) * 100));
-      };
       els.tabWorkbench.onclick = () => showTab('workbench');
       els.tabHistory.onclick = () => { renderHistory(); showTab('history'); };
       els.previewStage.addEventListener('pointerdown', e => {
