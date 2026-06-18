@@ -966,10 +966,6 @@
       </section>
 
       <aside class="w-80 glass rounded-[28px] p-5 overflow-y-auto flex flex-col gap-5">
-        <button id="addTextLayerBtn" class="primary-button rounded-2xl p-3 flex items-center justify-center gap-2">
-          <span class="material-symbols-outlined">add_comment</span>添加时间补丁
-        </button>
-
         <div id="watermarkList" class="watermark-list"></div>
         <div id="textSettings" class="flex flex-col gap-4">
           <div class="flex items-center justify-between">
@@ -1005,9 +1001,14 @@
                 </select>
               </div>
             </div>
-            <div class="flex flex-col gap-1.5">
-              <span class="text-[10px] font-extrabold text-slate-600 uppercase">字体</span>
-              <select id="fontFamily" class="field"></select>
+            <div class="grid grid-cols-2 gap-3 items-end">
+              <div class="flex flex-col gap-1.5 min-w-0">
+                <span class="text-[10px] font-extrabold text-slate-600 uppercase">字体</span>
+                <select id="fontFamily" class="field min-w-0"></select>
+              </div>
+              <button id="addTextLayerBtn" class="primary-button h-[38px] rounded-xl px-2 flex items-center justify-center gap-1 text-[11px] font-extrabold whitespace-nowrap">
+                <span class="material-symbols-outlined text-base">add_comment</span>添加时间补丁
+              </button>
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div class="color-control flex items-center justify-center gap-2 tile">
