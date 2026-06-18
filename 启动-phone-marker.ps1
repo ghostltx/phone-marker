@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $port = 8765
-$url = "http://127.0.0.1:$port/phone%20time.html"
+$url = "http://127.0.0.1:$port/phone-marker.html"
 
 Set-Location -LiteralPath $projectRoot
 $serverJob = Start-Job -ScriptBlock {
@@ -20,7 +20,7 @@ try {
   }
 
   Start-Process $url
-  Write-Host "phone time 已启动：$url"
+  Write-Host "phone-marker 已启动：$url"
   Write-Host "关闭此窗口或按 Ctrl+C 即可停止本地服务。"
   Receive-Job -Job $serverJob -Wait
 }
