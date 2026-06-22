@@ -967,7 +967,7 @@
         <div id="dropzone" class="dropzone m-3 rounded-2xl p-4 text-center cursor-pointer">
           <span class="material-symbols-outlined text-[#0058bc] text-2xl">drive_folder_upload</span>
           <p class="text-xs font-extrabold text-[#0058bc] mt-1">点击导入图片</p>
-          <p class="text-[10px] text-slate-500 mt-1">支持拖入单张或多张图片</p>
+          <p class="text-[10px] text-slate-500 mt-1">支持拖拽到此，或拖入单张/多张图片</p>
         </div>
         <div id="imageList" class="flex-1 overflow-y-auto px-3 pb-3 flex flex-col gap-3"></div>
         <div class="p-4 border-t border-white/40 text-center">
@@ -1021,19 +1021,11 @@
                 </div>
               </div>
               <div class="flex flex-col gap-1.5">
-                <label class="text-[10px] font-extrabold text-slate-600 uppercase">字号</label>
-                <select id="fontSize" class="field px-2">
-                  <option value="30">30px</option>
-                  <option value="36">36px</option>
-                  <option value="40">40px</option>
-                  <option value="48">48px</option>
-                  <option value="56" selected>56px</option>
-                  <option value="64">64px</option>
-                  <option value="72">72px</option>
-                  <option value="80">80px</option>
-                  <option value="96">96px</option>
-                  <option value="100">100px</option>
-                </select>
+                <div class="flex justify-between items-center">
+                  <label class="text-[10px] font-extrabold text-slate-600 uppercase">字号</label>
+                  <span id="fontSizeValue" class="text-[10px] font-mono font-extrabold text-[#0058bc]">56px</span>
+                </div>
+                <input id="fontSize" type="range" min="20" max="200" step="2" value="56" />
               </div>
             </div>
             <div class="grid grid-cols-2 gap-3 items-end">
@@ -1097,6 +1089,13 @@
                 <span id="textGapValue" class="text-[10px] font-mono font-extrabold text-[#0058bc]">12px</span>
               </div>
               <input id="textGap" type="range" min="0" max="80" value="12" />
+            </div>
+            <div class="flex flex-col gap-1.5">
+              <div class="flex justify-between items-center">
+                <label class="text-[10px] font-extrabold text-slate-600 uppercase">整体间隙</label>
+                <span id="textIndentValue" class="text-[10px] font-mono font-extrabold text-[#0058bc]">0px</span>
+              </div>
+              <input id="textIndent" type="range" min="-80" max="80" value="0" />
             </div>
             <div class="flex flex-col gap-1.5">
               <div class="flex justify-between items-center">
@@ -1254,6 +1253,7 @@
       backgroundPaddingX: 32,
       backgroundPaddingY: 20,
       textGap: 12,
+      textIndent: 0,
       colonOffsetY: 0,
       backgroundRadius: 24,
       backgroundOpacity: 1,
@@ -1320,8 +1320,11 @@
       fontSize: $('fontSize'),
       textGap: $('textGap'),
       textGapValue: $('textGapValue'),
+      textIndent: $('textIndent'),
+      textIndentValue: $('textIndentValue'),
       colonOffsetY: $('colonOffsetY'),
       colonOffsetYValue: $('colonOffsetYValue'),
+      fontSizeValue: $('fontSizeValue'),
       backgroundPadding: $('backgroundPadding'),
       backgroundPaddingValue: $('backgroundPaddingValue'),
       backgroundRadius: $('backgroundRadius'),
@@ -1484,6 +1487,18 @@
       return [left, ':', right];
     }
 
+    function timeGlyphMetrics(ctx, text, fontSize, gap, indent = 0) {
+      const [left, colon, right] = timeGlyphParts(text);
+      const digitWidths = '0123456789'.split('').map(ch => ctx.measureText(ch).width);
+      const digitCell = Math.ceil(Math.max(fontSize * 0.62, ...digitWidths));
+      const colonWidth = Math.ceil(Math.max(ctx.measureText(colon).width, fontSize * 0.18));
+      const colonGap = Math.max(4, Math.round(fontSize * 0.08));
+      const leftWidth = left.length * digitCell;
+      const rightWidth = right.length * digitCell;
+      const totalWidth = leftWidth + colonWidth + rightWidth + gap * 2 + colonGap * 2 + indent * 2;
+      return { left, colon, right, digitCell, colonWidth, colonGap, leftWidth, rightWidth, totalWidth };
+    }
+
     function measureTextWatermark(style = {}) {
       const merged = cloneTextStyle(style);
       const lines = String(merged.text || '00:00').split(/\r?\n/).map(line => line || ' ');
@@ -1495,14 +1510,12 @@
       const padX = Number(merged.backgroundPaddingX ?? merged.backgroundPadding ?? 32);
       const padY = Number(merged.backgroundPaddingY ?? merged.backgroundPadding ?? 32);
       const gap = Number(merged.textGap ?? 12);
+      const indent = Number(merged.textIndent ?? 0);
       let maxWidth = 1;
       let textHeight = lineHeightPx * lines.length;
       if (isTimeText) {
-        const [left, colon, right] = timeGlyphParts(merged.text);
-        const leftWidth = ctx.measureText(left).width;
-        const colonWidth = ctx.measureText(colon).width;
-        const rightWidth = ctx.measureText(right).width;
-        maxWidth = leftWidth + colonWidth + rightWidth + gap * 2;
+        const metrics = timeGlyphMetrics(ctx, merged.text, merged.fontSize, gap, indent);
+        maxWidth = metrics.totalWidth;
         textHeight = merged.fontSize;
       } else {
         const widths = lines.map(line => ctx.measureText(line).width);
@@ -1535,22 +1548,33 @@
       const isTimeText = /^\d{1,2}:\d{1,2}$/.test(String(layout.text || ''));
       const padX = Number(layout.backgroundPaddingX ?? layout.backgroundPadding ?? 32);
       const padY = Number(layout.backgroundPaddingY ?? layout.backgroundPadding ?? 32);
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      ctx.font = `${layout.fontWeight} ${layout.fontSize}px ${applyFontFamily(layout.fontFamily)}`;
       let lines = '';
       if (isTimeText) {
-        const [left, colon, right] = timeGlyphParts(layout.text);
+        const textIndent = Number(layout.textIndent ?? 0);
+        const metrics = timeGlyphMetrics(ctx, layout.text, layout.fontSize, Number(layout.textGap ?? 12), textIndent);
+        const { left, colon, right, digitCell, colonWidth, colonGap, leftWidth, rightWidth } = metrics;
         const fontFamily = escapeHtml(applyFontFamily(layout.fontFamily));
         const textY = Math.round(rectY + padY + layout.fontSize);
         const colonY = textY + Number(layout.colonOffsetY ?? 0);
-        const leftWidth = 0;
-        const colonWidth = 0;
-        const baseCenter = width / 2;
-        const leftX = baseCenter - Math.max(0, layout.textGap);
-        const colonX = baseCenter;
-        const rightX = baseCenter + Math.max(0, layout.textGap);
+        const gap = Number(layout.textGap ?? 12);
+        const startX = Math.round((width - (leftWidth + colonWidth + rightWidth + gap * 2 + colonGap * 2 + textIndent * 2)) / 2);
+        const leftStart = startX;
+        const colonX = leftStart + leftWidth + gap + colonGap + textIndent + colonWidth / 2;
+        const rightStart = leftStart + leftWidth + gap * 2 + colonWidth + colonGap * 2 + textIndent * 2;
+        const renderDigits = (textPart, start, align = 'start') => {
+          const chars = [...textPart].map((char, index) => {
+            const x = start + index * digitCell + digitCell / 2;
+            return `<text x="${x}" y="${textY}" text-anchor="middle" font-family="${fontFamily}" font-size="${layout.fontSize}" font-weight="${layout.fontWeight}" fill="${layout.textColor}">${escapeHtml(char)}</text>`;
+          }).join('');
+          return chars;
+        };
         lines = [
-          `<text x="${leftX}" y="${textY}" text-anchor="end" font-family="${fontFamily}" font-size="${layout.fontSize}" font-weight="${layout.fontWeight}" fill="${layout.textColor}">${escapeHtml(left)}</text>`,
+          renderDigits(left, leftStart),
           `<text x="${colonX}" y="${colonY}" text-anchor="middle" font-family="${fontFamily}" font-size="${layout.fontSize}" font-weight="${layout.fontWeight}" fill="${layout.textColor}">${escapeHtml(colon)}</text>`,
-          `<text x="${rightX}" y="${textY}" text-anchor="start" font-family="${fontFamily}" font-size="${layout.fontSize}" font-weight="${layout.fontWeight}" fill="${layout.textColor}">${escapeHtml(right)}</text>`
+          renderDigits(right, rightStart)
         ].join('');
       } else {
         const startY = rectY + padY + layout.fontSize;
@@ -1808,7 +1832,9 @@
       els.backgroundColor.value = nextStyle.backgroundColor;
       els.fontFamily.value = nextStyle.fontFamily;
       els.fontSize.value = Math.round(nextStyle.fontSize);
+      els.fontSizeValue.textContent = `${els.fontSize.value}px`;
       els.textGap.value = Math.round(nextStyle.textGap ?? DEFAULT_TEXT_WATERMARK_STYLE.textGap);
+      els.textIndent.value = Math.round(nextStyle.textIndent ?? DEFAULT_TEXT_WATERMARK_STYLE.textIndent);
       els.colonOffsetY.value = Math.round(nextStyle.colonOffsetY ?? DEFAULT_TEXT_WATERMARK_STYLE.colonOffsetY);
       els.backgroundPadding.value = Math.round(nextStyle.backgroundPadding);
       els.backgroundRadius.value = Math.round(nextStyle.backgroundRadius);
@@ -1820,7 +1846,9 @@
       els.scaleValue.textContent = `${els.scale.value}%`;
       els.textGapValue.textContent = `${els.textGap.value}px`;
       els.colonOffsetYValue.textContent = `${els.colonOffsetY.value}px`;
+      els.fontSizeValue.textContent = `${els.fontSize.value}px`;
       els.backgroundPaddingValue.textContent = `${els.backgroundPadding.value}px`;
+      els.textIndentValue.textContent = `${els.textIndent.value}px`;
       els.backgroundRadiusValue.textContent = `${els.backgroundRadius.value}px`;
       els.backgroundOpacityValue.textContent = `${els.backgroundOpacity.value}%`;
       const zoomPercent = Math.round(state.zoom * 100);
@@ -2018,24 +2046,30 @@
         ctx.textBaseline = 'alphabetic';
         const isTimeText = /^\d{1,2}:\d{1,2}$/.test(String(wm.textStyle.text || ''));
         if (isTimeText) {
-          const [left, colon, right] = timeGlyphParts(wm.textStyle.text);
+          const textIndent = Number(wm.textStyle.textIndent ?? 0);
+          const metrics = timeGlyphMetrics(ctx, wm.textStyle.text, wm.textStyle.fontSize, Number(wm.textStyle.textGap ?? 12), textIndent);
+          const { left, colon, right, digitCell, colonWidth, colonGap, leftWidth, rightWidth } = metrics;
           const padX = Number(wm.textStyle.backgroundPaddingX ?? wm.textStyle.backgroundPadding ?? 32);
           const padY = Number(wm.textStyle.backgroundPaddingY ?? wm.textStyle.backgroundPadding ?? 32);
           const baselineY = padY + wm.textStyle.fontSize;
-          const centerX = layout.width / 2;
           const gap = Math.max(0, Number(wm.textStyle.textGap ?? 12));
-          const leftX = centerX - gap;
-          const colonX = centerX;
-          const rightX = centerX + gap;
-          ctx.textAlign = 'right';
-          ctx.fillText(left, leftX, baselineY);
+          const startX = (layout.width - (leftWidth + colonWidth + rightWidth + gap * 2 + colonGap * 2 + textIndent * 2)) / 2;
+          const leftStart = startX;
+          const colonX = leftStart + leftWidth + gap + colonGap + textIndent + colonWidth / 2;
+          const rightStart = leftStart + leftWidth + gap * 2 + colonWidth + colonGap * 2 + textIndent * 2;
+          [...left].forEach((char, index) => {
+            ctx.textAlign = 'center';
+            ctx.fillText(char, leftStart + index * digitCell + digitCell / 2, baselineY);
+          });
           ctx.save();
           ctx.translate(colonX, baselineY + Number(wm.textStyle.colonOffsetY ?? 0));
           ctx.textAlign = 'center';
           ctx.fillText(colon, 0, 0);
           ctx.restore();
-          ctx.textAlign = 'left';
-          ctx.fillText(right, rightX, baselineY);
+          [...right].forEach((char, index) => {
+            ctx.textAlign = 'center';
+            ctx.fillText(char, rightStart + index * digitCell + digitCell / 2, baselineY);
+          });
         } else {
           const startY = wm.textStyle.backgroundPadding + wm.textStyle.fontSize;
           layout.lines.forEach((line, index) => {
@@ -2698,8 +2732,9 @@
         text: selectedTimeText(),
         backgroundColor: defaultBackgroundColor,
         textGap: Number(els.textGap.value || DEFAULT_TEXT_WATERMARK_STYLE.textGap),
+        textIndent: Number(els.textIndent.value || 0),
         colonOffsetY: Number(els.colonOffsetY.value || 0),
-        fontSize: Math.min(Math.max(Number(els.fontSize.value || DEFAULT_TEXT_WATERMARK_STYLE.fontSize), 30), 100),
+        fontSize: Math.min(Math.max(Number(els.fontSize.value || DEFAULT_TEXT_WATERMARK_STYLE.fontSize), 30), 200),
         backgroundPadding: Math.min(Number(els.backgroundPadding.value || DEFAULT_TEXT_WATERMARK_STYLE.backgroundPadding), 12),
         backgroundRadius: Math.min(Number(els.backgroundRadius.value || DEFAULT_TEXT_WATERMARK_STYLE.backgroundRadius), 12),
         backgroundOpacity: Math.max(.82, Number(els.backgroundOpacity.value || 100) / 100),
@@ -2713,6 +2748,7 @@
         fontFamily: els.fontFamily.value || 'RobotoFlexLocal',
         fontSize: Number(els.fontSize.value || DEFAULT_TEXT_WATERMARK_STYLE.fontSize),
         textGap: Number(els.textGap.value || DEFAULT_TEXT_WATERMARK_STYLE.textGap),
+        textIndent: Number(els.textIndent.value || 0),
         colonOffsetY: Number(els.colonOffsetY.value || 0),
         backgroundPadding: Number(els.backgroundPadding.value || DEFAULT_TEXT_WATERMARK_STYLE.backgroundPadding),
         backgroundRadius: Number(els.backgroundRadius.value || DEFAULT_TEXT_WATERMARK_STYLE.backgroundRadius),
@@ -2761,6 +2797,35 @@
 
     function bindEvents() {
       els.dropzone.onclick = openImagePicker;
+      els.dropzone.addEventListener('dragenter', event => {
+        event.preventDefault();
+        els.dropzone.classList.add('dragging');
+      });
+      els.dropzone.addEventListener('dragover', event => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+        els.dropzone.classList.add('dragging');
+      });
+      els.dropzone.addEventListener('dragleave', event => {
+        if (event.target === els.dropzone) {
+          els.dropzone.classList.remove('dragging');
+        }
+      });
+      els.dropzone.addEventListener('drop', async event => {
+        event.preventDefault();
+        els.dropzone.classList.remove('dragging');
+        const dt = event.dataTransfer;
+        if (!dt) return;
+        const items = dt.items ? [...dt.items] : [];
+        if (items.length && items.some(item => item.kind === 'file' && item.webkitGetAsEntry)) {
+          const files = await collectDroppedFiles(items);
+          if (files.length) await addFiles(files);
+          return;
+        }
+        const files = dt.files ? [...dt.files] : [];
+        if (files.length) await addFiles(files);
+      });
+      document.addEventListener('dragend', () => els.dropzone.classList.remove('dragging'));
       els.emptyState.onclick = openImagePicker;
       els.imageInput.onchange = e => addFiles(e.target.files);
       els.clearBtn.onclick = () => {
@@ -2795,7 +2860,7 @@
         renderWatermarkList();
         renderPreview();
       };
-      [els.textColor, els.backgroundColor, els.fontFamily, els.fontSize, els.textGap, els.colonOffsetY, els.backgroundPadding, els.backgroundRadius, els.backgroundOpacity].forEach(el => el.addEventListener('input', () => {
+      [els.textColor, els.backgroundColor, els.fontFamily, els.fontSize, els.textGap, els.textIndent, els.colonOffsetY, els.backgroundPadding, els.backgroundRadius, els.backgroundOpacity].forEach(el => el.addEventListener('input', () => {
         state.textDraftStyle = cloneTextStyle({
           ...state.textDraftStyle,
           text: selectedTimeText(),
@@ -2804,6 +2869,7 @@
           fontFamily: els.fontFamily.value || 'RobotoFlexLocal',
           fontSize: Number(els.fontSize.value || DEFAULT_TEXT_WATERMARK_STYLE.fontSize),
           textGap: Number(els.textGap.value || DEFAULT_TEXT_WATERMARK_STYLE.textGap),
+          textIndent: Number(els.textIndent.value || 0),
           colonOffsetY: Number(els.colonOffsetY.value || 0),
           backgroundPadding: Number(els.backgroundPadding.value || DEFAULT_TEXT_WATERMARK_STYLE.backgroundPadding),
           backgroundRadius: Number(els.backgroundRadius.value || DEFAULT_TEXT_WATERMARK_STYLE.backgroundRadius),
@@ -2816,6 +2882,12 @@
         renderWatermarkList();
         renderPreview();
       }));
+      els.fontSize.addEventListener('input', () => {
+        updateLabels();
+      });
+      els.textIndent.addEventListener('input', () => {
+        updateLabels();
+      });
       [els.hourInput, els.minuteInput].forEach(el => el.addEventListener('input', () => {
         syncTimeInputs();
         if (activeWatermark()?.type === 'text') {
@@ -2826,6 +2898,7 @@
       }));
       bindNumberInput(els.hourInput, 0, 23);
       bindNumberInput(els.minuteInput, 0, 59);
+      bindNumberInput(els.fontSize, 20, 200);
       els.addTextLayerBtn.onclick = addTextWatermarkLayer;
       els.exportCurrentBtn.onclick = exportCurrent;
       els.closeModalBtn.onclick = () => els.exportModal.classList.remove('open');
@@ -2968,6 +3041,43 @@
           e.preventDefault();
           exportCurrent();
         }
+      });
+    }
+
+    async function collectDroppedFiles(items) {
+      const files = [];
+      for (const item of items) {
+        const entry = item.webkitGetAsEntry?.();
+        if (!entry) continue;
+        const entryFiles = await readDroppedEntry(entry);
+        files.push(...entryFiles);
+      }
+      return files;
+    }
+
+    function readDroppedEntry(entry) {
+      return new Promise(resolve => {
+        if (entry.isFile) {
+          entry.file(file => resolve([file]), () => resolve([]));
+          return;
+        }
+        if (entry.isDirectory) {
+          const reader = entry.createReader();
+          const entries = [];
+          const readBatch = () => reader.readEntries(async batch => {
+            if (!batch.length) {
+              const nested = [];
+              for (const child of entries) nested.push(...await readDroppedEntry(child));
+              resolve(nested);
+              return;
+            }
+            entries.push(...batch);
+            readBatch();
+          }, () => resolve([]));
+          readBatch();
+          return;
+        }
+        resolve([]);
       });
     }
 
