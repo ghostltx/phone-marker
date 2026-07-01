@@ -1092,6 +1092,13 @@
             </div>
             <div class="flex flex-col gap-1.5">
               <div class="flex justify-between items-center">
+                <label class="text-[10px] font-extrabold text-slate-600 uppercase">数字宽度</label>
+                <span id="digitScaleValue" class="text-[10px] font-mono font-extrabold text-[#0058bc]">100%</span>
+              </div>
+              <input id="digitScale" type="range" min="50" max="150" value="100" />
+            </div>
+            <div class="flex flex-col gap-1.5">
+              <div class="flex justify-between items-center">
                 <label class="text-[10px] font-extrabold text-slate-600 uppercase">整体间隙</label>
                 <span id="textIndentValue" class="text-[10px] font-mono font-extrabold text-[#0058bc]">0px</span>
               </div>
@@ -1253,6 +1260,7 @@
       backgroundPaddingX: 32,
       backgroundPaddingY: 20,
       textGap: 12,
+      digitScale: 100,
       textIndent: 0,
       colonOffsetY: 0,
       backgroundRadius: 24,
@@ -1320,6 +1328,8 @@
       fontSize: $('fontSize'),
       textGap: $('textGap'),
       textGapValue: $('textGapValue'),
+      digitScale: $('digitScale'),
+      digitScaleValue: $('digitScaleValue'),
       textIndent: $('textIndent'),
       textIndentValue: $('textIndentValue'),
       colonOffsetY: $('colonOffsetY'),
@@ -1487,10 +1497,11 @@
       return [left, ':', right];
     }
 
-    function timeGlyphMetrics(ctx, text, fontSize, gap, indent = 0) {
+    function timeGlyphMetrics(ctx, text, fontSize, gap, indent = 0, digitScale = 100) {
       const [left, colon, right] = timeGlyphParts(text);
+      const scale = Math.max(.5, Math.min(1.5, Number(digitScale || 100) / 100));
       const digitWidths = '0123456789'.split('').map(ch => ctx.measureText(ch).width);
-      const digitCell = Math.ceil(Math.max(fontSize * 0.62, ...digitWidths));
+      const digitCell = Math.ceil(Math.max(fontSize * 0.62, ...digitWidths) * scale);
       const colonWidth = Math.ceil(Math.max(ctx.measureText(colon).width, fontSize * 0.18));
       const colonGap = Math.max(4, Math.round(fontSize * 0.08));
       const leftWidth = left.length * digitCell;
@@ -1511,10 +1522,11 @@
       const padY = Number(merged.backgroundPaddingY ?? merged.backgroundPadding ?? 32);
       const gap = Number(merged.textGap ?? 12);
       const indent = Number(merged.textIndent ?? 0);
+      const digitScale = Number(merged.digitScale ?? 100);
       let maxWidth = 1;
       let textHeight = lineHeightPx * lines.length;
       if (isTimeText) {
-        const metrics = timeGlyphMetrics(ctx, merged.text, merged.fontSize, gap, indent);
+        const metrics = timeGlyphMetrics(ctx, merged.text, merged.fontSize, gap, indent, digitScale);
         maxWidth = metrics.totalWidth;
         textHeight = merged.fontSize;
       } else {
@@ -1554,7 +1566,8 @@
       let lines = '';
       if (isTimeText) {
         const textIndent = Number(layout.textIndent ?? 0);
-        const metrics = timeGlyphMetrics(ctx, layout.text, layout.fontSize, Number(layout.textGap ?? 12), textIndent);
+        const digitScale = Math.max(.5, Math.min(1.5, Number(layout.digitScale ?? 100) / 100));
+        const metrics = timeGlyphMetrics(ctx, layout.text, layout.fontSize, Number(layout.textGap ?? 12), textIndent, Number(layout.digitScale ?? 100));
         const { left, colon, right, digitCell, colonWidth, colonGap, leftWidth, rightWidth } = metrics;
         const fontFamily = escapeHtml(applyFontFamily(layout.fontFamily));
         const textY = Math.round(rectY + padY + layout.fontSize);
@@ -1567,7 +1580,7 @@
         const renderDigits = (textPart, start, align = 'start') => {
           const chars = [...textPart].map((char, index) => {
             const x = start + index * digitCell + digitCell / 2;
-            return `<text x="${x}" y="${textY}" text-anchor="middle" font-family="${fontFamily}" font-size="${layout.fontSize}" font-weight="${layout.fontWeight}" fill="${layout.textColor}">${escapeHtml(char)}</text>`;
+            return `<text x="0" y="0" text-anchor="middle" font-family="${fontFamily}" font-size="${layout.fontSize}" font-weight="${layout.fontWeight}" fill="${layout.textColor}" transform="translate(${x} ${textY}) scale(${digitScale} 1)">${escapeHtml(char)}</text>`;
           }).join('');
           return chars;
         };
@@ -1834,6 +1847,7 @@
       els.fontSize.value = Math.round(nextStyle.fontSize);
       els.fontSizeValue.textContent = `${els.fontSize.value}px`;
       els.textGap.value = Math.round(nextStyle.textGap ?? DEFAULT_TEXT_WATERMARK_STYLE.textGap);
+      els.digitScale.value = Math.round(nextStyle.digitScale ?? DEFAULT_TEXT_WATERMARK_STYLE.digitScale);
       els.textIndent.value = Math.round(nextStyle.textIndent ?? DEFAULT_TEXT_WATERMARK_STYLE.textIndent);
       els.colonOffsetY.value = Math.round(nextStyle.colonOffsetY ?? DEFAULT_TEXT_WATERMARK_STYLE.colonOffsetY);
       els.backgroundPadding.value = Math.round(nextStyle.backgroundPadding);
@@ -1845,6 +1859,7 @@
       els.opacityValue.textContent = `${els.opacity.value}%`;
       els.scaleValue.textContent = `${els.scale.value}%`;
       els.textGapValue.textContent = `${els.textGap.value}px`;
+      els.digitScaleValue.textContent = `${els.digitScale.value}%`;
       els.colonOffsetYValue.textContent = `${els.colonOffsetY.value}px`;
       els.fontSizeValue.textContent = `${els.fontSize.value}px`;
       els.backgroundPaddingValue.textContent = `${els.backgroundPadding.value}px`;
@@ -1932,6 +1947,8 @@
           fontFamily: els.fontFamily.value || DEFAULT_TEXT_WATERMARK_STYLE.fontFamily,
           fontSize: Number(els.fontSize.value || DEFAULT_TEXT_WATERMARK_STYLE.fontSize),
           textGap: Number(els.textGap.value || DEFAULT_TEXT_WATERMARK_STYLE.textGap),
+          digitScale: Number(els.digitScale.value || DEFAULT_TEXT_WATERMARK_STYLE.digitScale),
+          textIndent: Number(els.textIndent.value || 0),
           colonOffsetY: Number(els.colonOffsetY.value || 0),
           backgroundPadding: Number(els.backgroundPadding.value || DEFAULT_TEXT_WATERMARK_STYLE.backgroundPadding),
           backgroundRadius: Number(els.backgroundRadius.value || DEFAULT_TEXT_WATERMARK_STYLE.backgroundRadius),
@@ -2047,7 +2064,8 @@
         const isTimeText = /^\d{1,2}:\d{1,2}$/.test(String(wm.textStyle.text || ''));
         if (isTimeText) {
           const textIndent = Number(wm.textStyle.textIndent ?? 0);
-          const metrics = timeGlyphMetrics(ctx, wm.textStyle.text, wm.textStyle.fontSize, Number(wm.textStyle.textGap ?? 12), textIndent);
+          const digitScale = Math.max(.5, Math.min(1.5, Number(wm.textStyle.digitScale ?? 100) / 100));
+          const metrics = timeGlyphMetrics(ctx, wm.textStyle.text, wm.textStyle.fontSize, Number(wm.textStyle.textGap ?? 12), textIndent, Number(wm.textStyle.digitScale ?? 100));
           const { left, colon, right, digitCell, colonWidth, colonGap, leftWidth, rightWidth } = metrics;
           const padX = Number(wm.textStyle.backgroundPaddingX ?? wm.textStyle.backgroundPadding ?? 32);
           const padY = Number(wm.textStyle.backgroundPaddingY ?? wm.textStyle.backgroundPadding ?? 32);
@@ -2057,9 +2075,16 @@
           const leftStart = startX;
           const colonX = leftStart + leftWidth + gap + colonGap + textIndent + colonWidth / 2;
           const rightStart = leftStart + leftWidth + gap * 2 + colonWidth + colonGap * 2 + textIndent * 2;
-          [...left].forEach((char, index) => {
+          const fillScaledDigit = (char, x, y) => {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(digitScale, 1);
             ctx.textAlign = 'center';
-            ctx.fillText(char, leftStart + index * digitCell + digitCell / 2, baselineY);
+            ctx.fillText(char, 0, 0);
+            ctx.restore();
+          };
+          [...left].forEach((char, index) => {
+            fillScaledDigit(char, leftStart + index * digitCell + digitCell / 2, baselineY);
           });
           ctx.save();
           ctx.translate(colonX, baselineY + Number(wm.textStyle.colonOffsetY ?? 0));
@@ -2067,8 +2092,7 @@
           ctx.fillText(colon, 0, 0);
           ctx.restore();
           [...right].forEach((char, index) => {
-            ctx.textAlign = 'center';
-            ctx.fillText(char, rightStart + index * digitCell + digitCell / 2, baselineY);
+            fillScaledDigit(char, rightStart + index * digitCell + digitCell / 2, baselineY);
           });
         } else {
           const startY = wm.textStyle.backgroundPadding + wm.textStyle.fontSize;
@@ -2732,6 +2756,7 @@
         text: selectedTimeText(),
         backgroundColor: defaultBackgroundColor,
         textGap: Number(els.textGap.value || DEFAULT_TEXT_WATERMARK_STYLE.textGap),
+        digitScale: Number(els.digitScale.value || DEFAULT_TEXT_WATERMARK_STYLE.digitScale),
         textIndent: Number(els.textIndent.value || 0),
         colonOffsetY: Number(els.colonOffsetY.value || 0),
         fontSize: Math.min(Math.max(Number(els.fontSize.value || DEFAULT_TEXT_WATERMARK_STYLE.fontSize), 30), 200),
@@ -2748,6 +2773,7 @@
         fontFamily: els.fontFamily.value || 'RobotoFlexLocal',
         fontSize: Number(els.fontSize.value || DEFAULT_TEXT_WATERMARK_STYLE.fontSize),
         textGap: Number(els.textGap.value || DEFAULT_TEXT_WATERMARK_STYLE.textGap),
+        digitScale: Number(els.digitScale.value || DEFAULT_TEXT_WATERMARK_STYLE.digitScale),
         textIndent: Number(els.textIndent.value || 0),
         colonOffsetY: Number(els.colonOffsetY.value || 0),
         backgroundPadding: Number(els.backgroundPadding.value || DEFAULT_TEXT_WATERMARK_STYLE.backgroundPadding),
@@ -2860,7 +2886,7 @@
         renderWatermarkList();
         renderPreview();
       };
-      [els.textColor, els.backgroundColor, els.fontFamily, els.fontSize, els.textGap, els.textIndent, els.colonOffsetY, els.backgroundPadding, els.backgroundRadius, els.backgroundOpacity].forEach(el => el.addEventListener('input', () => {
+      [els.textColor, els.backgroundColor, els.fontFamily, els.fontSize, els.textGap, els.digitScale, els.textIndent, els.colonOffsetY, els.backgroundPadding, els.backgroundRadius, els.backgroundOpacity].forEach(el => el.addEventListener('input', () => {
         state.textDraftStyle = cloneTextStyle({
           ...state.textDraftStyle,
           text: selectedTimeText(),
@@ -2869,6 +2895,7 @@
           fontFamily: els.fontFamily.value || 'RobotoFlexLocal',
           fontSize: Number(els.fontSize.value || DEFAULT_TEXT_WATERMARK_STYLE.fontSize),
           textGap: Number(els.textGap.value || DEFAULT_TEXT_WATERMARK_STYLE.textGap),
+          digitScale: Number(els.digitScale.value || DEFAULT_TEXT_WATERMARK_STYLE.digitScale),
           textIndent: Number(els.textIndent.value || 0),
           colonOffsetY: Number(els.colonOffsetY.value || 0),
           backgroundPadding: Number(els.backgroundPadding.value || DEFAULT_TEXT_WATERMARK_STYLE.backgroundPadding),
